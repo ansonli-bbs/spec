@@ -1,7 +1,7 @@
 // For now, I will settle with converting the mathjax environments into barebone text nodes.
 // In the future, mathjax may be rendered entirely online.
 import {NodeRenderer} from "./renderer";
-import {DisplayMath, Node, Parbreak} from "@unified-latex/unified-latex-types";
+import {DisplayMath, Node} from "@unified-latex/unified-latex-types";
 import {match} from "@unified-latex/unified-latex-util-match";
 import {printRaw} from "@unified-latex/unified-latex-util-print-raw";
 import {htmlLike} from "@unified-latex/unified-latex-util-html-like";
@@ -28,15 +28,6 @@ export class MathRenderer extends NodeRenderer {
 
         this.preambleDump = preambleDump ?? '';
         this.refRenderer = refRenderer;
-    }
-
-    // Insert a parbreak after display math so that wrapPars() (used by
-    // BlockRenderer/ProofRenderer) places the display-math <div> and the
-    // subsequent text in separate <p> tags.  Without this, MathJax may fail
-    // to render inline math that immediately follows \].
-    private withTrailingParbreak(node: Node): Node[] {
-        const parbreak: Parbreak = { type: "parbreak" };
-        return [node, parbreak];
     }
 
     isTikzEnvironment(node: Node): boolean {
@@ -76,7 +67,7 @@ export class MathRenderer extends NodeRenderer {
         });
     }
 
-    render(node: Node): Node | Node[] | void {
+    render(node: Node): Node | void {
         if (match.math(node)) {
             if (node.type === 'inlinemath') {
                 // Inline math gets printed out directly.
@@ -96,7 +87,7 @@ export class MathRenderer extends NodeRenderer {
             this.refRenderer.process(node);
 
             // Here it would have to be display math. In which case the content will be wrapped inside a div.
-            return this.withTrailingParbreak(htmlLike({
+            return htmlLike({
                 tag: 'div',
                 attributes: {
                     class: classes.displayEquation,
@@ -105,7 +96,7 @@ export class MathRenderer extends NodeRenderer {
                     type: 'string',
                     content: printRaw(node)
                 }
-            }));
+            });
         }
 
         // Here it would be an align environment or something of this kind.
@@ -119,7 +110,7 @@ export class MathRenderer extends NodeRenderer {
             // Render the refs in math mode.
             this.refRenderer.process(node);
 
-            return this.withTrailingParbreak(htmlLike({
+            return htmlLike({
                 tag: 'div',
                 attributes: {
                     class: classes.displayEquation,
@@ -129,7 +120,7 @@ export class MathRenderer extends NodeRenderer {
                     type: 'string',
                     content: printRaw(node)
                 }
-            }))
+            })
         }
     }
 }
