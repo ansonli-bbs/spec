@@ -10,6 +10,23 @@ import {printRaw} from "@unified-latex/unified-latex-util-print-raw";
 const packageCommands = ['usepackage', 'RequirePackage']
 const inputCommands = ['input', 'include'];
 
+// Store for raw tikzpicture source text, keyed by placeholder ID.
+// tikzpicture content is extracted before parsing to prevent unified-latex
+// from mangling TikZ-specific syntax (e.g. \foreach \x/\label in {...}).
+export const tikzRawSources = new Map<number, string>();
+let tikzCounter = 0;
+
+function preserveTikzPictures(source: string): string {
+    return source.replace(
+        /\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g,
+        (fullMatch) => {
+            const id = tikzCounter++;
+            tikzRawSources.set(id, fullMatch);
+            return `\\begin{tikzpicture}__TIKZRAW_${id}__\\end{tikzpicture}`;
+        }
+    );
+}
+
 export class Loader {
     readonly visitedFiles: Set<string> = new Set();
     logger: ParserLogger;
@@ -147,7 +164,7 @@ export class Loader {
                 }
             }
 
-            const root = parse(fileContent);
+            const root = parse(preserveTikzPictures(fileContent));
 
             return await this.processNodes(root.content, targetFile)
         }))).flat();
@@ -167,7 +184,7 @@ export class Loader {
         this.visitedFiles.add(path.normalize(file));
 
 
-        const root = parse(fileContent);
+        const root = parse(preserveTikzPictures(fileContent));
 
         return {
             ...root,

@@ -13,6 +13,7 @@ import {createSyncFn} from "synckit";
 import {resolve} from 'path';
 import {toTagString} from "../../tag";
 import {RefRenderer} from "./ref-renderer";
+import {tikzRawSources} from "../loader";
 
 const tikz2Svg = createSyncFn(
     resolve(__dirname, './tikz-worker')
@@ -42,7 +43,15 @@ export class MathRenderer extends NodeRenderer {
 
         this.addInfo("Rendering tikz picture. Consider not using the compile all configuration if there is a large number of them.");
 
-        const svg = tikz2Svg(printRaw(tikzNode), this.preambleDump);
+        // For tikzpicture environments, use the preserved raw source to avoid
+        // mangled content from the parser (e.g. \foreach \x/\label in {...}).
+        let tikzSource = printRaw(tikzNode);
+        const placeholderMatch = tikzSource.match(/__TIKZRAW_(\d+)__/);
+        if (placeholderMatch) {
+            tikzSource = tikzRawSources.get(parseInt(placeholderMatch[1]))!;
+        }
+
+        const svg = tikz2Svg(tikzSource, this.preambleDump);
 
         this.addInfo("Finished rendering tikz picture.");
 
