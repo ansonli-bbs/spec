@@ -14,7 +14,7 @@ export abstract class NodeRenderer {
         this.logger = logger ?? new ParserLogger({});
     }
 
-    abstract render(node: Node): Node | null | void;
+    abstract render(node: Node): Node | Node[] | null | void;
 
     addError(err: ParsingMessage | string) {
         if (typeof err === "string") {
