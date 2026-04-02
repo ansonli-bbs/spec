@@ -37,6 +37,20 @@
     margin-bottom: 0.5rem;
 }
 
+.itemize {
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 1.5rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.itemize li > * {
+    margin-bottom: 0.5rem;
+}
+
 
 .block-container, .proof {
     display: flex;
