@@ -68,7 +68,9 @@ export class RefRenderer extends NodeRenderer {
             tag: 'a',
             attributes: {
                 href, class: classes.ref,
-                onclick: fallback
+                onclick: fallback,
+                // An additional helper property to help with hover previews.
+                targetTag: targetTagString,
             },
             content: typeof node.refMeta?.text === 'string' ? {
                 type: "string",

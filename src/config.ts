@@ -30,6 +30,9 @@ export const SpecConfigSchema = z.object({
         recentChanges: z.int().min(0).max(32).default(10),
         tableOfContentsDepth: z.int().min(0).max(4).default(2),
 
+        hoverPreview: z.boolean().default(true),
+        copyLabelButton: z.boolean().default(false),
+
         advertiseSpec: z.boolean().default(true),
     }).prefault({})
 });

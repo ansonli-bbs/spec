@@ -86,17 +86,23 @@ export async function runCompiler({compileAll, conservative, targetFile}: Compil
         bibliographyLabelTags,
         nextAvailableTag,
         unitTagHash,
-        graphicPathHash
+        graphicPathHash,
+        conservative
     });
 
     const result = await parser.parseFile(targetFile ?? config.document);
 
     try {
+        const upsertBatchSize = 500;
+
         consola.info(`Inserting/updating ${result.unitsToUpdate.length} units into the database.`);
         // On conflict, update all non-primary columns.
         const primaryColumns = unitRepository.metadata.columns
             .filter((c) => c.isPrimary).map((c) => c.databaseName);
-        await unitRepository.upsert(result.unitsToUpdate, primaryColumns);
+
+        for (let i = 0; i < result.unitsToUpdate.length; i += upsertBatchSize) {
+            await unitRepository.upsert(result.unitsToUpdate.slice(i, i + upsertBatchSize), primaryColumns);
+        }
 
         // Only delete old units outside of conservative mode.
         if (!conservative) {
@@ -111,7 +117,9 @@ export async function runCompiler({compileAll, conservative, targetFile}: Compil
 
         // Units should just be refreshed every time.
         await bibliographyRepository.deleteAll();
-        await bibliographyRepository.insert(result.bibliography);
+        for (let i = 0; i < result.bibliography.length; i += upsertBatchSize) {
+            await bibliographyRepository.insert(result.bibliography.slice(i, i + upsertBatchSize));
+        }
 
         consola.info('(Re)building the search index.')
 
@@ -125,7 +133,9 @@ export async function runCompiler({compileAll, conservative, targetFile}: Compil
         `);
 
         consola.info(`Updating ${result.graphicsToUpdate.length} graphics entries.`);
-        await graphicsDataRepository.upsert(result.graphicsToUpdate, ['path']);
+        for (let i = 0; i < result.graphicsToUpdate.length; i += upsertBatchSize) {
+            await graphicsDataRepository.upsert(result.graphicsToUpdate.slice(i, i + upsertBatchSize), ['path']);
+        }
         // Only delete old units outside of conservative mode.
         if (!conservative) {
             consola.info(`Deleting ${result.graphicsToDelete.length} graphics entries from the database.`);

@@ -4,7 +4,6 @@ import {match} from "@unified-latex/unified-latex-util-match";
 import {htmlLike} from "@unified-latex/unified-latex-util-html-like";
 import {classes} from "./classes";
 import {s} from "@unified-latex/unified-latex-builder";
-import {wrapPars} from "@unified-latex/unified-latex-to-hast";
 
 
 export class FootnoteRefRenderer extends NodeRenderer {

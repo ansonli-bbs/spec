@@ -1,8 +1,6 @@
 import {IRUnit} from "./unit";
 import {Node} from "@unified-latex/unified-latex-types";
 import {printRaw} from "@unified-latex/unified-latex-util-print-raw";
-import {ReferenceCollector} from "../metadata";
-import {FootnoteCollector} from "./footnote-collector";
 import {RendererBuilder} from "../util";
 
 // To reuse rendering code, the "mainContent" of a block will not be its content, but will just be the original node itself.

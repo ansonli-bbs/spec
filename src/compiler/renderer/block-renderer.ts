@@ -32,6 +32,8 @@ export class BlockRenderer extends NodeRenderer {
             node.content.shift();
         }
 
+        const onclickCopyLabel = `navigator.clipboard.writeText(${JSON.stringify(node.meta.label)})`;
+
         return htmlLike({
             tag: 'div',
             attributes: {
@@ -58,6 +60,16 @@ export class BlockRenderer extends NodeRenderer {
                             s('.')
                         ]
                     })
+                }),
+                htmlLike({
+                    tag: 'a',
+                    attributes: {
+                        class: classes.copyLabel,
+                        onclick: onclickCopyLabel,
+                        title: 'Copy Label',
+                        href: '#'
+                    },
+                    content: s('label')
                 }),
                 htmlLike({
                     tag: 'span',

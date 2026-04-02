@@ -1,7 +1,7 @@
 import {Division} from "./division";
 import {DocumentVisitor} from "../visitor";
 import {Node} from "@unified-latex/unified-latex-types";
-import {visit, VisitInfo} from "@unified-latex/unified-latex-util-visit";
+import {VisitInfo} from "@unified-latex/unified-latex-util-visit";
 import {match} from "@unified-latex/unified-latex-util-match";
 import {ParserLogger} from "../logging-base";
 

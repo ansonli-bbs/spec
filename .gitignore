@@ -20,3 +20,4 @@ spec.db
 spec.toml
 *.tgz
 *.tex
+*.bib

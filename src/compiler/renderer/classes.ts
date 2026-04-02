@@ -15,4 +15,6 @@ export const classes = {
     figure: 'figure',
     figureCaption: 'figure-caption link-foreground',
     footnoteRef: 'footnote-ref link-primary',
+    textAction: 'text-action',
+    copyLabel: 'text-action copy-label',
 } as const;

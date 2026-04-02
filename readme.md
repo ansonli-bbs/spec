@@ -1,5 +1,8 @@
 # Spec
 
+![Pack](https://github.com/Jerry-licious/spec/actions/workflows/pack.yml/badge.svg)
+
+
 Spec is a limited latex to website compiler heavily, heavily by [Gerby](https://gerby-project.github.io/), 
 offering an online tag-based view for a LaTeX document. Each part/chapter/section/theorem is assigned a unique _tag_ 
 associated to its label, and each tag gets its own webpage. 
@@ -75,7 +78,6 @@ npx spec watch --conservative
 will start the compiler in conservative mode, which causes the following:
 - When a change is detected, **only** render the changed file. This will dramatically speed up compile times. 
 - Render whenever a Tex file is detected to change regardless whether it belongs to a project or not.
-- Replace the main page with the file that is being edited. 
 - Cause links leaving and entering the file to be broken.
 - Break all counters in edited files. 
 
@@ -120,6 +122,8 @@ maxSearchPages = 48
 
 recentChanges = 10
 tableOfContentsDepth = 2
+
+hoverPreview = true
 
 advertiseSpec = true
 ```
@@ -167,6 +171,9 @@ to. May slow down the compiler significantly when there is a large number of tag
 
 - `recentChanges`: The number of recent changes to show on the sidebar of the main page. If set to `0`, the recent changes section will never show up. 
 - `tableOfContentsDepth`: How many additional layers to display in the table of contents. For example, setting it to `1` will display all chapters on the main page, setting it to `2` will display all sections on the main page, and so on.
+
+- `hoverPreview`: When hovering links, preview the target. 
+- `copyLabelButton`: Add a button next to theorems to copy their label. 
 
 - `advertiseSpec`: Attribute spec in the sidebar. 
 
@@ -312,6 +319,8 @@ The following are features that I am _considering_ to add to the project in the 
 due to reasons ranging from being occupied to being incompetent. 
 
 - Server side MathJax rendering option.
-- Ability to include images.
 - Left side bar as index?
+- Comments
+- Copy label buttons
+- Better parasitic links in MathJax. 
 

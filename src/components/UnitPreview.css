@@ -1,0 +1,36 @@
+.unit-preview {
+    position: fixed;
+    z-index: 999;
+
+    border-radius: 0.5rem;
+
+    padding: 1rem;
+
+    max-width: calc(0.75 * var(--line-width));
+    max-height: 50vh;
+
+    overflow-y: scroll;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dark .unit-preview {
+    background: var(--neutral-900);
+    color: var(--neutral-50);
+
+    border: 1px solid var(--neutral-700);
+
+    box-shadow: 0 0 7px 1px rgba(0,0,0,0.5);
+}
+
+.light .unit-preview {
+    background: var(--neutral-50);
+    color: black;
+
+    border: 1px solid var(--neutral-300);
+
+    box-shadow: 0 0 7px 1px rgba(0,0,0,0.25);
+}
+

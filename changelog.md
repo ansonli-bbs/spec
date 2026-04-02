@@ -1,5 +1,10 @@
-# v0.2.1-pre, 2026-03-31
+# v0.2.1, 2026-04-02
 
+- Fixed MathJax paragraph rendering problem. 
+- Added support for hover preview for units. 
+- Fixed a bug where large documents crash on upsert. 
+- Added a button next to theorems to copy their label.
+- Conservative mode no longer overwrites the main page.
 - Conservative mode no longer collects the preamble. 
 - Added footnote support. 
 - Enabled support for tikz pictures. 

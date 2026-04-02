@@ -15,7 +15,9 @@ import {
     BlockCollector,
     BlockEnv,
     Division,
-    DivisionCollector, Figure, FigureCollector, FootnoteCollector,
+    DivisionCollector,
+    Figure,
+    FigureCollector,
     IRUnit,
     LabeledEquation,
     LabeledEquationCollector,
@@ -27,7 +29,9 @@ import {
     CiteAssigner,
     CustomMacroCollector,
     EnvironmentLabelAssigner,
-    EquationLabelAssigner, FigureCaptionNumberer, GraphicsPathAssigner,
+    EquationLabelAssigner,
+    FigureCaptionNumberer,
+    GraphicsPathAssigner,
     MacroLabelAssigner,
     Numberer,
     RefAssigner,
@@ -40,14 +44,16 @@ import {
     BlockRenderer,
     CiteRenderer,
     EmptyParagraphFilter,
+    FigureCaptionRenderer,
+    FigureRenderer,
+    FootnoteRefRenderer,
+    GraphicsRenderer,
     ItemNumberer,
     MathRenderer,
     OmitMacro,
     ProofRenderer,
     RefRenderer,
-    UnitTitleRenderer,
-    FigureCaptionRenderer,
-    FigureRenderer, GraphicsRenderer, FootnoteRefRenderer
+    UnitTitleRenderer
 } from "./renderer";
 import {unifiedLatexToHast} from "@unified-latex/unified-latex-to-hast";
 import rehypeStringify from "rehype-stringify";
@@ -58,7 +64,6 @@ import {TikzExtractor} from "./renderer/tikz-extractor";
 import {TaggableNode} from "./metadata/util";
 import {ItemParagraphBreaker} from "./renderer/item-paragraph-breaker";
 import path from "node:path";
-import AsyncLock from "async-lock";
 import {Sema} from "async-sema";
 import {GraphicData} from "../db/graphic-data";
 import {AppDataSource} from "../db";
@@ -124,13 +129,16 @@ export class Compiler {
     baseRenderer?: Processor;
     rendererBuilder: RendererBuilder;
 
-    constructor({config, unitLabelTags, bibliographyLabelTags, nextAvailableTag, unitTagHash, graphicPathHash}: {
+    conservative: boolean;
+
+    constructor({config, unitLabelTags, bibliographyLabelTags, nextAvailableTag, unitTagHash, graphicPathHash, conservative}: {
         config: SpecConfig;
         unitLabelTags: Map<string, number>;
         bibliographyLabelTags: Map<string, number>;
         nextAvailableTag: number;
         unitTagHash: Map<number, string>;
         graphicPathHash: Map<string, string>;
+        conservative?: boolean;
     }) {
         this.entry = config.document;
         this.compileAll = config.compiler.compileAll;
@@ -159,6 +167,8 @@ export class Compiler {
         this.figures = new Map<number, Figure>();
 
         this.rendererBuilder = () => { throw new Error('The renderer is not yet created.') };
+
+        this.conservative = conservative ?? false;
 
         this.logger = new ParserLogger({
             onError: message => {
@@ -649,11 +659,14 @@ export class Compiler {
         });
         partCollector.process(this.documentRoot!);
 
-        const mainCollector = new MainCollector({
-            existingDivisions: this.divisions, title: this.title,
-            logger: divisionLogger
-        });
-        mainCollector.process(this.documentRoot!);
+        // Do not overwrite the main page in conservative mode.
+        if (!this.conservative) {
+            const mainCollector = new MainCollector({
+                existingDivisions: this.divisions, title: this.title,
+                logger: divisionLogger
+            });
+            mainCollector.process(this.documentRoot!);
+        }
 
         divisionLogger.report(`Collected ${this.divisions.size} divisions.`);
     }

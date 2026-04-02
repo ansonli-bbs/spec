@@ -3,7 +3,7 @@ import {Node} from "@unified-latex/unified-latex-types";
 import {match} from "@unified-latex/unified-latex-util-match";
 import {htmlLike} from "@unified-latex/unified-latex-util-html-like";
 import path from "node:path";
-import {graphicsRoot, graphicsURLRoot} from "../util";
+import {graphicsURLRoot} from "../util";
 import {pgfkeysArgToObject} from "@unified-latex/unified-latex-util-pgfkeys";
 import {printRaw} from "@unified-latex/unified-latex-util-print-raw";
 

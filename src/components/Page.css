@@ -167,4 +167,25 @@
     padding: 1rem;
 }
 
+.text-action {
+    font-family: "Material Icons", "Comic Sans MS", serif;
+    text-decoration: none;
 
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+
+    color: var(--neutral-500);
+}
+
+.dark .text-action:hover {
+    color: var(--neutral-100);
+}
+
+.light .text-action:hover {
+    color: var(--neutral-800);
+}
+
+.hide-copy-label .copy-label {
+    display: none;
+}
