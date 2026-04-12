@@ -29,11 +29,13 @@ program.command('serve')
 program.command('compile')
     .description('Compiles the website.')
     .option('--all', 'Force the compiler to rerender every unit, even those that have not changed since the last render.', false)
+    .option('-v, --verbose', 'Print every stage timing and a per-environment breakdown of theorem counts in the compile summary.', false)
     .action(async (opts) => {
         consola.info(`Spec ${version}. Starting the compiler...`);
-        
+
         await runCompiler({
-            compileAll: opts.all
+            compileAll: opts.all,
+            verbose: opts.verbose
         });
     });
 
@@ -57,11 +59,12 @@ program.command('watch')
     }, 3000)
     .option('--conservative', 'Only compile files that change to maximise speed. Destroys the main page and will lead to broken links GLOBALLY. ', false)
     .option('--compileAll', 'Force the compiler to rerender every unit, even those that have already been compiled before. Disables conservative mode. ', false)
+    .option('-v, --verbose', 'Print every stage timing and a per-environment breakdown of theorem counts in the compile summary.', false)
     .action(async (opts) => {
         process.env.PORT = String(opts.port);
 
         consola.info(`Spec ${version}. Watching the current directory...`);
-        
+
         // @ts-ignore
         import('../../.output/server/index.mjs');
 
@@ -70,11 +73,13 @@ program.command('watch')
                 compile({
                     compileAll: opts.compileAll,
                     targetFile: path,
-                    conservative: true
+                    conservative: true,
+                    verbose: opts.verbose
                 }, opts.port);
             } else {
                 compile({
-                    compileAll: opts.compileAll
+                    compileAll: opts.compileAll,
+                    verbose: opts.verbose
                 }, opts.port);
             }
         }
@@ -85,7 +90,8 @@ program.command('watch')
         }).on('add', listener)
             .on('change', listener)
             .on('unlink', () => compile({
-            compileAll: opts.compileAll
+            compileAll: opts.compileAll,
+            verbose: opts.verbose
         }, opts.port))
     })
 

@@ -2,6 +2,7 @@
 import * as fs from "fs/promises"
 import * as crypto from "crypto"
 import {SpecConfig} from "../config";
+import {BuildMetrics} from "./metrics";
 import {ParserLogger} from "./logging-base";
 import consola from "consola";
 import {messageText} from "./error";
@@ -16,6 +17,7 @@ import {
     BlockEnv,
     Division,
     DivisionCollector,
+    DivisionMarkerLocator,
     Figure,
     FigureCollector,
     IRUnit,
@@ -113,6 +115,7 @@ export class Compiler {
     nextAvailableTag: number;
 
     logger: ParserLogger;
+    metrics: BuildMetrics;
 
     documentRoot?: Root;
 
@@ -131,7 +134,7 @@ export class Compiler {
 
     conservative: boolean;
 
-    constructor({config, unitLabelTags, bibliographyLabelTags, nextAvailableTag, unitTagHash, graphicPathHash, conservative}: {
+    constructor({config, unitLabelTags, bibliographyLabelTags, nextAvailableTag, unitTagHash, graphicPathHash, conservative, metrics}: {
         config: SpecConfig;
         unitLabelTags: Map<string, number>;
         bibliographyLabelTags: Map<string, number>;
@@ -139,6 +142,7 @@ export class Compiler {
         unitTagHash: Map<number, string>;
         graphicPathHash: Map<string, string>;
         conservative?: boolean;
+        metrics?: BuildMetrics;
     }) {
         this.entry = config.document;
         this.compileAll = config.compiler.compileAll;
@@ -170,6 +174,8 @@ export class Compiler {
 
         this.conservative = conservative ?? false;
 
+        this.metrics = metrics ?? new BuildMetrics();
+
         this.logger = new ParserLogger({
             onError: message => {
                 consola.error(messageText(message));
@@ -189,31 +195,100 @@ export class Compiler {
     async parseFile(file: string): Promise<CompileResult> {
         consola.start(`Starting the compiler on ${file}.`);
 
-        await this.collectContent(file);
+        try {
+            await this.metrics.time('load', async () => {
+                await this.collectContent(file);
+            });
 
-        this.collectDefinitions();
+            await this.metrics.time('labels', async () => {
+                if (this.metrics.verbose) {
+                    await this.metrics.time('definitions',      () => this.collectDefinitions());
+                    await this.metrics.time('labelsAndNumbers', () => this.assignLabelsAndNumbers());
+                    await this.metrics.time('tags',             () => this.assignTags());
+                    await this.metrics.time('enumerateAdjust',  () => this.adjustEnumerates());
+                    await this.metrics.time('links',            () => this.assignLinks());
+                    await this.metrics.time('blockMetadata',    () => this.assignBlockMetadata());
+                } else {
+                    this.collectDefinitions();
+                    this.assignLabelsAndNumbers();
+                    this.assignTags();
+                    this.adjustEnumerates();
+                    this.assignLinks();
+                    this.assignBlockMetadata();
+                }
+            });
 
-        this.assignLabelsAndNumbers();
-        this.assignTags();
+            await this.metrics.time('collect', async () => {
+                await this.collectUnits();
+                if (this.metrics.verbose) {
+                    await this.metrics.time('references', () => this.computeUnitReferences());
+                } else {
+                    this.computeUnitReferences();
+                }
+            });
 
-        this.adjustEnumerates();
+            const graphicsResult = await this.metrics.time('graphics', () => this.copyGraphics());
+            const renderResult   = await this.metrics.time('render',   () => this.renderUnits());
 
-        this.assignLinks();
-        this.assignBlockMetadata();
+            const result = {
+                ...graphicsResult,
+                ...renderResult,
+                bibliography: this.bibliographyData,
+                preamble: [...this.rawMacros.values()].join('\n')
+            };
 
-        this.collectUnits();
-        this.computeUnitReferences();
+            this.logger.report("Finished compiling the project.");
 
-        const result = {
-            ...await this.copyGraphics(),
-            ...this.renderUnits(),
-            bibliography: this.bibliographyData,
-            preamble: [...this.rawMacros.values()].join('\n')
-        };
+            return result;
+        } finally {
+            this.populateCounts();
+        }
+    }
 
-        this.logger.report("Finished compiling the project.");
+    // Populate count metrics from the data already collected on `this`.
+    // Called from `parseFile`'s finally so partial counts are still emitted
+    // even if a stage throws mid-pipeline.
+    private populateCounts() {
+        // Inputs.
+        // The Compiler doesn't directly track the loader; we approximate via
+        // bibliographyData length and the existing accessible state. Tex file
+        // count is set by collectContent below.
+        this.metrics.set('bibliography', this.bibliographyData.length);
 
-        return result;
+        // Structure: group divisions by their source-node name (= unitType).
+        let parts = 0, chapters = 0, sections = 0, subsections = 0, subsubsections = 0;
+        for (const division of this.divisions.values()) {
+            switch (division.sourceNodeName) {
+                case 'part':          parts++; break;
+                case 'chapter':       chapters++; break;
+                case 'section':       sections++; break;
+                case 'subsection':    subsections++; break;
+                case 'subsubsection': subsubsections++; break;
+            }
+        }
+        this.metrics.set('parts', parts);
+        this.metrics.set('chapters', chapters);
+        this.metrics.set('sections', sections);
+        this.metrics.set('subsections', subsections);
+        this.metrics.set('subsubsections', subsubsections);
+
+        // Content.
+        this.metrics.set('theorems',           this.blocks.size);
+        this.metrics.set('equations',          this.equations.size);
+        this.metrics.set('figures',            this.figures.size);
+        this.metrics.set('customEnvironments', this.blockTypes.size);
+        this.metrics.set('customMacros',       this.rawMacros.size);
+
+        // Verbose-only theorem breakdown by environment name.
+        if (this.metrics.verbose && this.blocks.size > 0) {
+            const breakdown = new Map<string, number>();
+            for (const block of this.blocks.values()) {
+                const env = block.sourceNodeName;
+                const label = this.blockTypes.get(env)?.name ?? env;
+                breakdown.set(label, (breakdown.get(label) ?? 0) + 1);
+            }
+            this.metrics.setBreakdown('theorems', breakdown);
+        }
     }
 
 
@@ -332,6 +407,7 @@ export class Compiler {
         }));
 
         graphicLogger.report(`Copied ${graphicsToUpdate.length} graphics files (skipped ${totalWitnessedPaths - graphicsToUpdate.length}).`)
+        this.metrics.set('graphicsSkipped', Math.max(0, totalWitnessedPaths - graphicsToUpdate.length));
 
         return {
             graphicsToUpdate: graphicsToUpdate,
@@ -340,7 +416,7 @@ export class Compiler {
     }
 
 
-    renderUnits() {
+    async renderUnits() {
         const renderingLogger = new ParserLogger({ parent: this.logger });
         renderingLogger.info('Creating HTML renderer. ');
 
@@ -382,9 +458,9 @@ export class Compiler {
 
         renderingLogger.info('Rendering units.');
 
-        this.renderUnitLinkTargets();
+        await this.renderUnitLinkTargets();
 
-        const toUpdate = this.renderUnitData();
+        const toUpdate = await this.renderUnitData();
         const toDelete = [...this.unitTagHash.keys()].filter((t) => !this.units.has(t));
 
         renderingLogger.report(`Rendered ${toUpdate.length} units (skipped ${this.units.size - toUpdate.length}).`);
@@ -392,29 +468,42 @@ export class Compiler {
         return { unitsToUpdate: toUpdate, unitsToDelete: toDelete };
     }
 
-    renderUnitData() {
-        const toUpdate: UnitData[] = [];
+    async renderUnitData(): Promise<UnitData[]> {
+        // Render per-unit work in parallel. Each call is independent: it reads
+        // the units map and builds a fresh renderer from the frozen base
+        // processor, so there is no shared mutable state between units.
+        // Promise.all over sync work still runs serially on Node's single JS
+        // thread, but this shape is ready to migrate to worker_threads later
+        // without further surgery at the call sites.
+        const work: Array<Promise<UnitData>> = [];
         for (const unit of this.units.values()) {
             // Skip any node with the same hash as the stored.
-
             if (!this.compileAll && this.unitTagHash.has(unit.tag) && unit.hash() === this.unitTagHash.get(unit.tag)) continue;
 
-            toUpdate.push(unit.renderToUnitData(this.units, this.rendererBuilder));
+            work.push(Promise.resolve().then(() => unit.renderToUnitData(this.units, this.rendererBuilder)));
         }
 
-        return toUpdate;
+        return Promise.all(work);
     }
 
-    renderUnitLinkTargets() {
+    async renderUnitLinkTargets(): Promise<void> {
+        const work: Array<Promise<void>> = [];
         for (const unit of this.units.values()) {
-            unit.renderLinkTarget(this.rendererBuilder);
+            work.push(Promise.resolve().then(() => unit.renderLinkTarget(this.rendererBuilder)));
         }
+        await Promise.all(work);
     }
 
-    collectUnits() {
-        this.collectDivisions();
-        this.collectBlocks();
-        this.collectParasiticEnvironments();
+    async collectUnits() {
+        if (this.metrics.verbose) {
+            await this.metrics.time('divisions', () => this.collectDivisions());
+            await this.metrics.time('blocks',    () => this.collectBlocks());
+            await this.metrics.time('parasitic', () => this.collectParasiticEnvironments());
+        } else {
+            this.collectDivisions();
+            this.collectBlocks();
+            this.collectParasiticEnvironments();
+        }
 
         this.units = new Map<number, IRUnit>([
             ...Array.from(this.divisions.entries()),
@@ -502,14 +591,18 @@ export class Compiler {
         loadingLogger.info('Starting to load files.');
 
         const loader = new Loader({ logger: loadingLogger });
-        this.documentRoot = await loader.process(file);
+        const documentRoot = this.metrics.verbose
+            ? await this.metrics.time('loadFiles', () => loader.process(file))
+            : await loader.process(file);
+        this.documentRoot = documentRoot;
+        this.metrics.set('texFiles', loader.visitedFiles.size);
 
         const bibliographyLoader = new BibliographyLoader({
             nextAvailableTag: this.nextAvailableTag,
             keyTagMap: this.bibliographyKeyTags,
             logger: loadingLogger
         });
-        bibliographyLoader.process(this.documentRoot);
+        bibliographyLoader.process(documentRoot);
         this.bibliographyEntries = bibliographyLoader.bibliographyEntries;
         this.bibliographyData = bibliographyLoader.getBibliographyData();
 
@@ -620,44 +713,53 @@ export class Compiler {
         const divisionLogger = new ParserLogger({ parent: this.logger });
         divisionLogger.info('Collecting divisions.');
 
-        const subsubsectionCollector = new DivisionCollector({
-            divisionMarkers, targetDivisionMarker: 'subsubsection', divisionName: 'Subsubsection',
-            childDivisions: new Set<string>(), descendantDivisions: new Set<string>(), existingDivisions: this.divisions,
-            logger: divisionLogger
-        });
-        subsubsectionCollector.process(this.documentRoot!);
+        // Walk the document tree ONCE to locate every division-marker node.
+        // The five per-level DivisionCollectors below then iterate this
+        // pre-collected list instead of each doing their own full AST walk,
+        // turning 5 O(nodes) traversals into 1 O(nodes) + 5 O(divisions).
+        const markerLocator = new DivisionMarkerLocator({ divisionMarkers, logger: divisionLogger });
+        markerLocator.process(this.documentRoot!);
+        const markerLocations = markerLocator.locations;
 
-        const subsectionCollector = new DivisionCollector({
-            divisionMarkers, targetDivisionMarker: 'subsection', divisionName: 'Subsection',
-            childDivisions: new Set<string>(['subsubsection']),
-            descendantDivisions: new Set<string>(['subsubsection']), existingDivisions: this.divisions,
-            logger: divisionLogger
-        });
-        subsectionCollector.process(this.documentRoot!);
+        // Level configs must be applied deepest → shallowest, because each
+        // level looks up its children from `this.divisions` as it builds.
+        const levelConfigs = [
+            {
+                targetDivisionMarker: 'subsubsection', divisionName: 'Subsubsection',
+                childDivisions: new Set<string>(),
+                descendantDivisions: new Set<string>(),
+            },
+            {
+                targetDivisionMarker: 'subsection', divisionName: 'Subsection',
+                childDivisions: new Set<string>(['subsubsection']),
+                descendantDivisions: new Set<string>(['subsubsection']),
+            },
+            {
+                targetDivisionMarker: 'section', divisionName: 'Section',
+                childDivisions: new Set<string>(['subsection']),
+                descendantDivisions: new Set<string>(['subsection', 'subsubsection']),
+            },
+            {
+                targetDivisionMarker: 'chapter', divisionName: 'Chapter',
+                childDivisions: new Set<string>(['section']),
+                descendantDivisions: new Set<string>(['section', 'subsection', 'subsubsection']),
+            },
+            {
+                targetDivisionMarker: 'part', divisionName: 'Part',
+                childDivisions: new Set<string>(['chapter']),
+                descendantDivisions: new Set<string>(['chapter', 'section', 'subsection', 'subsubsection']),
+            },
+        ];
 
-        const sectionCollector = new DivisionCollector({
-            divisionMarkers, targetDivisionMarker: 'section', divisionName: 'Section',
-            childDivisions: new Set<string>(['subsection']),
-            descendantDivisions: new Set<string>(['subsection', 'subsubsection']), existingDivisions: this.divisions,
-            logger: divisionLogger
-        });
-        sectionCollector.process(this.documentRoot!);
-
-        const chapterCollector = new DivisionCollector({
-            divisionMarkers, targetDivisionMarker: 'chapter', divisionName: 'Chapter',
-            childDivisions: new Set<string>(['section']),
-            descendantDivisions: new Set<string>(['section', 'subsection', 'subsubsection']), existingDivisions: this.divisions,
-            logger: divisionLogger
-        });
-        chapterCollector.process(this.documentRoot!);
-
-        const partCollector = new DivisionCollector({
-            divisionMarkers, targetDivisionMarker: 'part', divisionName: 'Part',
-            childDivisions: new Set<string>(['chapter']),
-            descendantDivisions: new Set<string>(['chapter', 'section', 'subsection', 'subsubsection']), existingDivisions: this.divisions,
-            logger: divisionLogger
-        });
-        partCollector.process(this.documentRoot!);
+        for (const config of levelConfigs) {
+            const collector = new DivisionCollector({
+                divisionMarkers,
+                ...config,
+                existingDivisions: this.divisions,
+                logger: divisionLogger,
+            });
+            collector.processMarkers(markerLocations);
+        }
 
         // Do not overwrite the main page in conservative mode.
         if (!this.conservative) {

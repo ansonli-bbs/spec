@@ -6,6 +6,8 @@ export interface UnitLinkListProps {
     title?: string,
     depth?: number,
     items: LinkTarget[],
+    collapsible?: boolean,
+    defaultOpen?: boolean,
 }
 
 
@@ -20,6 +22,9 @@ function toLinkListItem(target: LinkTarget, depth: number): LinkListItem {
 
 
 export function UnitLinkList(props: UnitLinkListProps) {
-    return <LinkList title={props.title} items={props.items.map((t) => toLinkListItem(t, props.depth ?? 0))}/>
+    return <LinkList title={props.title}
+                     items={props.items.map((t) => toLinkListItem(t, props.depth ?? 0))}
+                     collapsible={props.collapsible}
+                     defaultOpen={props.defaultOpen}/>
 }
 

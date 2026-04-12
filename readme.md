@@ -121,7 +121,7 @@ searchLimit = 16
 maxSearchPages = 48
 
 recentChanges = 10
-tableOfContentsDepth = 2
+tableOfContentsDepth = { document = 1, part = 1, chapter = 2, section = 1, subsection = 1, subsubsection = 1, default = 1 }
 
 hoverPreview = true
 
@@ -170,7 +170,7 @@ to. May slow down the compiler significantly when there is a large number of tag
 - `maxSearchPages`: Maximum number of pages for searches. 
 
 - `recentChanges`: The number of recent changes to show on the sidebar of the main page. If set to `0`, the recent changes section will never show up. 
-- `tableOfContentsDepth`: How many additional layers to display in the table of contents. For example, setting it to `1` will display all chapters on the main page, setting it to `2` will display all sections on the main page, and so on.
+- `tableOfContentsDepth`: How many additional layers to display in the table of contents. Accepts either a single integer (legacy form — applied uniformly everywhere), or a per-unit-type record of the form `{ document, part, chapter, section, subsection, subsubsection, default }` where each entry is an integer in `[0, 4]`. On a page of a given unit type, the value for that type is used; if it is not set, `default` is used. For example, setting `chapter = 2` will display all sections and subsections of the current chapter on chapter pages. A plain integer like `tableOfContentsDepth = 2` is still accepted.
 
 - `hoverPreview`: When hovering links, preview the target. 
 - `copyLabelButton`: Add a button next to theorems to copy their label. 

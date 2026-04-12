@@ -28,7 +28,26 @@ export const SpecConfigSchema = z.object({
         maxSearchPages: z.int().min(1).default(48),
 
         recentChanges: z.int().min(0).max(32).default(10),
-        tableOfContentsDepth: z.int().min(0).max(4).default(2),
+        tableOfContentsDepth: z.union([
+            z.int().min(0).max(4),
+            z.object({
+                document: z.int().min(0).max(4).optional(),
+                part: z.int().min(0).max(4).optional(),
+                chapter: z.int().min(0).max(4).optional(),
+                section: z.int().min(0).max(4).optional(),
+                subsection: z.int().min(0).max(4).optional(),
+                subsubsection: z.int().min(0).max(4).optional(),
+                default: z.int().min(0).max(4).default(1),
+            }),
+        ]).default({
+            document: 1,
+            part: 1,
+            chapter: 2,
+            section: 1,
+            subsection: 1,
+            subsubsection: 1,
+            default: 1,
+        }),
 
         hoverPreview: z.boolean().default(true),
         copyLabelButton: z.boolean().default(false),
@@ -47,4 +66,19 @@ export let config: SpecConfig;
 
 export function setConfig(newConfig: SpecConfig) {
     config = newConfig;
+}
+
+/**
+ * Resolve the TOC depth for a given unit type, accepting either the legacy
+ * integer form or the per-unit-type record form of `tableOfContentsDepth`.
+ */
+export function tocDepthFor(
+    cfg: SpecConfig | undefined,
+    unitType: string,
+): number {
+    const value = cfg?.website.tableOfContentsDepth;
+    if (value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    const perType = (value as Record<string, number | undefined>)[unitType];
+    return perType ?? value.default;
 }

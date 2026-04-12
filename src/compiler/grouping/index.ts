@@ -1,7 +1,7 @@
 export { BlockEnv } from "./block"
 export { BlockCollector } from "./block-collector"
 export { Division } from "./division"
-export { DivisionCollector } from "./division-collector"
+export { DivisionCollector, DivisionMarkerLocator } from "./division-collector"
 export { LabeledEquationCollector } from "./labeled-equation-collector"
 export { LabeledEquation } from "./labeled-equation"
 export { Figure } from "./figure"

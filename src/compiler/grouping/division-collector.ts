@@ -5,6 +5,34 @@ import {VisitInfo} from "@unified-latex/unified-latex-util-visit";
 import {match} from "@unified-latex/unified-latex-util-match";
 import {ParserLogger} from "../logging-base";
 
+// Pre-collected location of a division marker node in the AST. Used to avoid
+// walking the whole tree once per division level — the tree is walked once
+// to build a list of these, and then each DivisionCollector iterates the list
+// instead of the tree.
+export interface DivisionMarkerLocation {
+    node: Node;
+    visitInfo: VisitInfo;
+}
+
+// Walks the document tree once and records every node that matches one of the
+// known division markers. This lets the five per-level DivisionCollectors share
+// a single AST traversal instead of each running its own full walk.
+export class DivisionMarkerLocator extends DocumentVisitor {
+    divisionMarkers: Set<string>;
+    locations: DivisionMarkerLocation[] = [];
+
+    constructor({divisionMarkers, logger}: {divisionMarkers: Set<string>; logger?: ParserLogger}) {
+        super({ logger });
+        this.divisionMarkers = divisionMarkers;
+    }
+
+    visit(node: Node, visitInfo: VisitInfo): void {
+        if (!match.anyMacro(node)) return;
+        if (!this.divisionMarkers.has((node as {content: string}).content)) return;
+        this.locations.push({node, visitInfo});
+    }
+}
+
 
 export class DivisionCollector extends DocumentVisitor {
     // Collection of all macros that initialise divisions.
@@ -43,6 +71,16 @@ export class DivisionCollector extends DocumentVisitor {
         this.existingDivisions = existingDivisions ?? new Map<number, Division>();
         this.childDivisions = childDivisions;
         this.descendantDivisions = descendantDivisions;
+    }
+
+    // Feed a pre-collected list of division-marker locations through this
+    // collector's visit() logic, avoiding a second full AST walk. Only
+    // locations whose marker name matches this collector's target level are
+    // processed; the rest are skipped by visit()'s own early return.
+    processMarkers(locations: DivisionMarkerLocation[]): void {
+        for (const {node, visitInfo} of locations) {
+            this.visit(node, visitInfo);
+        }
     }
 
     visit(node: Node, visitInfo: VisitInfo): void {

@@ -23,6 +23,9 @@ export interface PageProps {
     parentChain?: LinkTarget[];
 
     sidebarContent?: JSX.Element | JSX.Element[] | string;
+    // Optional override for the in-flow sidebar shown on narrow screens.
+    // When omitted, falls back to `sidebarContent`.
+    thinSidebarContent?: JSX.Element | JSX.Element[] | string;
 }
 
 
@@ -170,7 +173,7 @@ export function Page(props: PageProps) {
                         {props.children}
                     </div>
                     <div class={'thin-sidebar-content'}>
-                        {props.sidebarContent}
+                        {props.thinSidebarContent ?? props.sidebarContent}
                         {
                             config()?.website.advertiseSpec ? <div class={'advertise-spec'}>
                                 <a href={githubLink} target="_blank" rel="noopener noreferrer">Powered by Spec</a>

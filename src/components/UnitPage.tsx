@@ -2,6 +2,7 @@ import {Page} from "../components/Page";
 import {createAsync} from "@solidjs/router";
 import {getConfig} from "../app-data";
 import {mainPageType, shouldDisplayTitle} from "../unit-types";
+import {tocDepthFor} from "../config";
 import './UnitPage.css'
 import {UnitLinkList} from "../components/UnitLinkList";
 import {createEffect, createMemo, JSX, Show} from "solid-js";
@@ -14,8 +15,38 @@ export interface UnitPageProps {
     additionalSidebarContent?: JSX.Element | JSX.Element[] | string;
 }
 
-function UnitSidebarContent(props: UnitPageProps) {
+interface UnitSidebarContentProps extends UnitPageProps {
+    // When true, the "Contents" TOC is wrapped in a collapsed <details>
+    // (used for the mobile/thin sidebar variant).
+    tocInDetails?: boolean;
+    // When false/undefined, the TOC is omitted from the sidebar entirely
+    // (used for part/document pages where the TOC lives in main content).
+    showToc?: boolean;
+    // TOC depth + default expansion state (sidebar variants only).
+    tocDepth?: number;
+    tocDefaultOpen?: boolean;
+}
+
+function UnitSidebarContent(props: UnitSidebarContentProps) {
+    const tocList = () => props.showToc && props.unit.children && props.unit.children.length > 0
+        ? <UnitLinkList title={'Contents'}
+                        items={props.unit.children}
+                        depth={props.tocDepth ?? 0}
+                        collapsible
+                        defaultOpen={props.tocDefaultOpen ?? true}/>
+        : null;
+
     return <div class={'unit-sidebar-content'}>
+        {
+            props.showToc && props.unit.children && props.unit.children.length > 0 ?
+                (props.tocInDetails
+                    ? <details class={'mobile-toc-details'}>
+                        <summary>Contents</summary>
+                        {tocList()}
+                    </details>
+                    : tocList())
+                : null
+        }
         {props.unit.directlyReferences.length ? <UnitLinkList title={'Direct References'} items={props.unit.directlyReferences}/> : ''}
         {props.unit.indirectlyReferences.length ? <UnitLinkList title={'Indirect References'} items={props.unit.indirectlyReferences}/> : ''}
         {props.unit.directlyReferencedBy.length ? <UnitLinkList title={'Direct Backlinks'} items={props.unit.directlyReferencedBy}/> : ''}
@@ -50,6 +81,13 @@ export function UnitPage(props: UnitPageProps) {
 
     const description = props.unit.contentText.slice(0, 50);
 
+    // Part/document pages have no contentHTML — their TOC *is* the content,
+    // so we keep it in main content (collapsed). All other pages move the TOC
+    // into the sidebar.
+    const isAllTocPage = createMemo(() => props.unit.contentHTML.trim().length === 0);
+
+    const depth = createMemo(() => tocDepthFor(config(), props.unit.unitType));
+
     createEffect(() => {
         const _ = props.unit.tag;
         const mathJax = (window as any).MathJax;
@@ -73,17 +111,27 @@ export function UnitPage(props: UnitPageProps) {
                      {props.unit.numberingText ? `${props.unit.numberingText} ` : null}<span innerHTML={props.unit.titleHTML ?? ''}/>
                  </span>}
               description={description}
-              sidebarContent={<UnitSidebarContent {...props} />}
+              sidebarContent={<UnitSidebarContent {...props}
+                                                  showToc={!isAllTocPage()}
+                                                  tocDepth={depth()}
+                                                  tocDefaultOpen={true}
+                                                  tocInDetails={false}/>}
+              thinSidebarContent={<UnitSidebarContent {...props}
+                                                      showToc={!isAllTocPage()}
+                                                      tocDepth={depth()}
+                                                      tocDefaultOpen={true}
+                                                      tocInDetails={true}/>}
               parentChain={props.unit.parentChain}>
             {
                 props.unit.contentHTML.trim() ?
                     <div class={'unit-content-container'} innerHTML={props.unit.contentHTML}/> : null
             }
             {
-                props.unit.children && props.unit.children.length > 0 ?
-                    // Only say "content" if there is a need to separate this portion from the previous.
-                    <UnitLinkList title={props.unit.contentHTML.trim() ? 'Contents' : ''}
-                                  items={props.unit.children} depth={config()?.website.tableOfContentsDepth ?? 0}/> : null
+                isAllTocPage() && props.unit.children && props.unit.children.length > 0 ?
+                    <UnitLinkList items={props.unit.children}
+                                  depth={depth()}
+                                  collapsible
+                                  defaultOpen={false}/> : null
             }
             <FootnoteSection footnotes={props.unit.footnotes ?? null}/>
         </Page>

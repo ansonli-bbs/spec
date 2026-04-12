@@ -22,6 +22,13 @@
     min-height: 0;
 }
 
+.mobile-toc-details > summary {
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1.1em;
+    padding: 0.25rem 0;
+}
+
 
 .enumerate {
     margin-top: 0;

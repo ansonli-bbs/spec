@@ -11,3 +11,37 @@
 
 .link-list-item {
 }
+
+/* Collapsible branches (when LinkList is rendered with collapsible=true). */
+.link-list-item-collapsible > details > summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+}
+
+.link-list-item-collapsible > details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.link-list-item-collapsible > details > summary::before {
+    content: '\25B8'; /* ▸ */
+    display: inline-block;
+    width: 0.75rem;
+    font-size: 0.75em;
+    transition: transform 0.1s ease;
+    color: var(--text-secondary, currentColor);
+    opacity: 0.7;
+}
+
+.link-list-item-collapsible > details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+/* Align leaves with collapsible siblings so the link text starts at the
+   same x as a sibling's <summary> link (which is offset by the ▸ marker
+   width 0.75rem + the summary's 0.25rem gap). */
+.link-list-item-leaf {
+    padding-left: 1rem;
+}

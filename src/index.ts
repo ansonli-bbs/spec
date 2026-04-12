@@ -1,5 +1,6 @@
 import "./compiler/loader"
 import {Compiler} from "./compiler/compiler";
+import {BuildMetrics} from "./compiler/metrics";
 import {AppDataSource, initialiseDatabase} from "./db";
 import consola from "consola";
 import {In} from "typeorm";
@@ -14,10 +15,11 @@ export interface CompilerOptionOverride {
     compileAll: boolean;
     conservative?: boolean;
     targetFile?: string;
+    verbose?: boolean;
 }
 
 
-export async function runCompiler({compileAll, conservative, targetFile}: CompilerOptionOverride ) {
+export async function runCompiler({compileAll, conservative, targetFile, verbose}: CompilerOptionOverride ) {
     const config = await loadConfig();
     if (!config) {
         process.exit(0);
@@ -26,7 +28,10 @@ export async function runCompiler({compileAll, conservative, targetFile}: Compil
     config.compiler.compileAll = config.compiler.compileAll || compileAll;
     // Compile all will disable conservative mode.
     conservative = conservative && !compileAll;
-    
+
+    const metrics = new BuildMetrics({ verbose: verbose ?? false });
+    metrics.start();
+
     await initialiseDatabase(config.database);
 
     const unitRepository = AppDataSource.getRepository(UnitData);
@@ -87,77 +92,106 @@ export async function runCompiler({compileAll, conservative, targetFile}: Compil
         nextAvailableTag,
         unitTagHash,
         graphicPathHash,
-        conservative
+        conservative,
+        metrics,
     });
 
-    const result = await parser.parseFile(targetFile ?? config.document);
-
+    let result: Awaited<ReturnType<typeof parser.parseFile>> | undefined;
+    let dbFailed = false;
     try {
-        const upsertBatchSize = 500;
+        result = await parser.parseFile(targetFile ?? config.document);
 
-        consola.info(`Inserting/updating ${result.unitsToUpdate.length} units into the database.`);
-        // On conflict, update all non-primary columns.
-        const primaryColumns = unitRepository.metadata.columns
-            .filter((c) => c.isPrimary).map((c) => c.databaseName);
+        const r = result;
+        await metrics.time('database', async () => {
+            const upsertBatchSize = 500;
 
-        for (let i = 0; i < result.unitsToUpdate.length; i += upsertBatchSize) {
-            await unitRepository.upsert(result.unitsToUpdate.slice(i, i + upsertBatchSize), primaryColumns);
-        }
+            consola.info(`Inserting/updating ${r.unitsToUpdate.length} units into the database.`);
+            // On conflict, update all non-primary columns.
+            const primaryColumns = unitRepository.metadata.columns
+                .filter((c) => c.isPrimary).map((c) => c.databaseName);
 
-        // Only delete old units outside of conservative mode.
-        if (!conservative) {
-            consola.info(`Deleting ${result.unitsToDelete.length} units from the database.`);
+            for (let i = 0; i < r.unitsToUpdate.length; i += upsertBatchSize) {
+                await unitRepository.upsert(r.unitsToUpdate.slice(i, i + upsertBatchSize), primaryColumns);
+            }
 
-            await unitRepository.delete({
-                tag: In(result.unitsToDelete)
-            });
-        }
+            // Only delete old units outside of conservative mode.
+            if (!conservative) {
+                consola.info(`Deleting ${r.unitsToDelete.length} units from the database.`);
 
-        consola.info(`Inserting ${result.bibliography.length} bibliography entries.`)
+                await unitRepository.delete({
+                    tag: In(r.unitsToDelete)
+                });
+            }
 
-        // Units should just be refreshed every time.
-        await bibliographyRepository.deleteAll();
-        for (let i = 0; i < result.bibliography.length; i += upsertBatchSize) {
-            await bibliographyRepository.insert(result.bibliography.slice(i, i + upsertBatchSize));
-        }
+            consola.info(`Inserting ${r.bibliography.length} bibliography entries.`)
 
-        consola.info('(Re)building the search index.')
+            // Units should just be refreshed every time.
+            await bibliographyRepository.deleteAll();
+            for (let i = 0; i < r.bibliography.length; i += upsertBatchSize) {
+                await bibliographyRepository.insert(r.bibliography.slice(i, i + upsertBatchSize));
+            }
 
-        // SQLite supports fts5: https://sqlite.org/fts5.html
-        await AppDataSource.query(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS units_fts 
-        USING fts5(contentText, content='units', content_rowid='tag');
-        `);
-        await AppDataSource.query(`
-        INSERT INTO units_fts(units_fts) VALUES('rebuild');
-        `);
+            consola.info('(Re)building the search index.')
 
-        consola.info(`Updating ${result.graphicsToUpdate.length} graphics entries.`);
-        for (let i = 0; i < result.graphicsToUpdate.length; i += upsertBatchSize) {
-            await graphicsDataRepository.upsert(result.graphicsToUpdate.slice(i, i + upsertBatchSize), ['path']);
-        }
-        // Only delete old units outside of conservative mode.
-        if (!conservative) {
-            consola.info(`Deleting ${result.graphicsToDelete.length} graphics entries from the database.`);
+            // SQLite supports fts5: https://sqlite.org/fts5.html
+            await AppDataSource.query(`
+            CREATE VIRTUAL TABLE IF NOT EXISTS units_fts
+            USING fts5(contentText, content='units', content_rowid='tag');
+            `);
+            await AppDataSource.query(`
+            INSERT INTO units_fts(units_fts) VALUES('rebuild');
+            `);
 
-            await graphicsDataRepository.delete({
-                path: In(result.graphicsToDelete)
-            });
-        }
+            consola.info(`Updating ${r.graphicsToUpdate.length} graphics entries.`);
+            for (let i = 0; i < r.graphicsToUpdate.length; i += upsertBatchSize) {
+                await graphicsDataRepository.upsert(r.graphicsToUpdate.slice(i, i + upsertBatchSize), ['path']);
+            }
+            // Only delete old units outside of conservative mode.
+            if (!conservative) {
+                consola.info(`Deleting ${r.graphicsToDelete.length} graphics entries from the database.`);
 
-        if (!conservative) {
-            consola.info('Updating the project preamble.');
-            await AppDataSource.getRepository(AuxData).upsert({
-                key: 'preamble',
-                value: result.preamble,
-            }, ['key']);
-        }
+                await graphicsDataRepository.delete({
+                    path: In(r.graphicsToDelete)
+                });
+            }
 
-        consola.success(`Successfully updated the database.`);
+            if (!conservative) {
+                consola.info('Updating the project preamble.');
+                await AppDataSource.getRepository(AuxData).upsert({
+                    key: 'preamble',
+                    value: r.preamble,
+                }, ['key']);
+            }
+
+            consola.success(`Successfully updated the database.`);
+        });
+
+        // Output counts for the summary.
+        metrics.set('unitsUpdated',   result.unitsToUpdate.length);
+        metrics.set('unitsDeleted',   result.unitsToDelete.length);
+        metrics.set('graphicsCopied', result.graphicsToUpdate.length);
+        // graphicsSkipped is set by Compiler.copyGraphics on the same metrics instance.
     } catch (error) {
+        dbFailed = true;
         consola.error('Failed to update the database.');
         console.error(error);
+    } finally {
+        metrics.finish();
+        try {
+            consola.box(metrics.format({
+                errors:   parser.logger.errors,
+                warnings: parser.logger.warnings,
+            }));
+        } catch (e) {
+            // If the box renderer fails for any reason, fall back to plain log.
+            consola.log(metrics.format({
+                errors:   parser.logger.errors,
+                warnings: parser.logger.warnings,
+            }));
+        }
+    }
 
+    if (dbFailed) {
         process.exit(42);
     }
 }
